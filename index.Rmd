@@ -1,0 +1,559 @@
+---
+title: "DSAC League Records"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(DT)
+library(flexdashboard)
+library(plotly)
+library(stringr)
+
+fbaTeams <- data.frame(teamDSAC = 1:14,
+                       owner = c("Chris", "Nut", "Spencer", "Sean", "Paulo", "Nathan", "Barry", 
+                                 "Ronny", "Kevin", "Kief", "Ping", "Mike", "Alex", "Josh"))
+
+fba <- lapply(list.files("data/fba"), function(x){
+  data.table::fread(str_c("data/fba/", x))
+}) %>%
+  bind_rows()
+
+fbaCareer <- 
+  fba %>%
+  left_join(fbaTeams, by = "teamDSAC") %>%
+  filter(slot < 12) %>%
+  filter(matchupType == "Regular" 
+         # | 
+         #   (year == "2020-21" &
+         #      ((matchup == 18 & owner %in% c("Josh", "Kief", "Murph", "Nathan")) |
+         #         (matchup == 19 & owner %in% c("Alex", "Chris", "Josh", "Murph")) |
+         #         (matchup == 20 & owner %in% c("Chris", "Josh")))) |
+         #   (year == "2021-22" &
+         #      ((matchup == 22 & owner %in% c("Chris", "Josh", "Mike", "Murph")) |
+         #         (matchup == 23 & owner %in% c("Alex", "Barry", "Chris", "Josh")) |
+         #         (matchup == 24 & owner %in% c("Barry", "Chris"))))
+         ) %>%
+  group_by(playerId, name) %>%
+  summarize(year = "Career",
+            `Team(s)` = str_c(unique(owner), collapse = "-"),
+            GP = sum(GP),
+            MIN = sum(MIN),
+            FGM = sum(FGM),
+            FGA = sum(FGA),
+            FTM = sum(FTM),
+            FTA = sum(FTA),
+            FGM3 = sum(FGM3),
+            REB = sum(REB),
+            AST = sum(AST),
+            STL = sum(STL),
+            BLK = sum(BLK),
+            TOV = sum(TOV),
+            PTS = sum(PTS)) %>%
+  ungroup() %>%
+  mutate(liftFG = (sum(FGM)/sum(FGA)) - ((sum(FGM) - FGM)/(sum(FGA) - FGA)),
+         liftFT = (sum(FTM)/sum(FTA)) - ((sum(FTM) - FTM)/(sum(FTA) - FTA))
+         # rFG = rank(-liftFG, ties.method = "min"),
+         # rFT = rank(-liftFT, ties.method = "min"),
+         # rFGM3 = rank(-FGM3, ties.method = "min"),
+         # rREB = rank(-REB, ties.method = "min"),
+         # rAST = rank(-AST, ties.method = "min"),
+         # rSTL = rank(-STL, ties.method = "min"),
+         # rBLK = rank(-BLK, ties.method = "min"),
+         # rPTS = rank(-PTS, ties.method = "min"),
+         # labelFG = str_c(name, ": ", format(100*round(FGM/FGA, 4), nsmall = 2), "% (", FGA, ")"),
+         # labelFT = str_c(name, ": ", format(100*round(FTM/FTA, 4), nsmall = 2), "% (", FTA, ")"),
+         # labelFGM3 = str_c(name, ": ",FGM3),
+         # labelREB = str_c(name, ": ", REB),
+         # labelAST = str_c(name, ": ", AST),
+         # labelSTL = str_c(name, ": ", STL),
+         # labelBLK = str_c(name, ": ", BLK),
+         # labelPTS = str_c(name, ": ", PTS)
+         ) %>%
+  rename(`3PM` = FGM3)
+
+fbaYearByYear <- fba %>%
+  left_join(fbaTeams, by = "teamDSAC") %>%
+  filter(slot < 12) %>%
+  filter(matchupType == "Regular") %>%
+  summarize(FGM = sum(FGM),
+            FGA = sum(FGA),
+            FTM = sum(FTM),
+            FTA = sum(FTA),
+            FGM3 = sum(FGM3),
+            REB = sum(REB),
+            AST = sum(AST),
+            STL = sum(STL),
+            BLK = sum(BLK),
+            TOV = sum(TOV),
+            PTS = sum(PTS),
+            .by = c(playerId, name, year)) %>%
+  arrange(playerId, year) %>%
+  rename(`3PM` = FGM3)
+  
+
+# careerRecordBook <- data.frame(FG = fbaCareer %>% arrange(rFG) %>% slice(1:50) %>% select(labelFG) %>% pull(),
+#                                FT = fbaCareer %>% arrange(rFT) %>% slice(1:50) %>% select(labelFT) %>% pull(),
+#                                FGM3 = fbaCareer %>% arrange(rFGM3) %>% slice(1:50) %>% select(labelFGM3) %>% pull(),
+#                                REB = fbaCareer %>% arrange(rREB) %>% slice(1:50) %>% select(labelREB) %>% pull(),
+#                                AST = fbaCareer %>% arrange(rAST) %>% slice(1:50) %>% select(labelAST) %>% pull(),
+#                                STL = fbaCareer %>% arrange(rSTL) %>% slice(1:50) %>% select(labelSTL) %>% pull(),
+#                                BLK = fbaCareer %>% arrange(rBLK) %>% slice(1:50) %>% select(labelBLK) %>% pull(),
+#                                PTS = fbaCareer %>% arrange(rPTS) %>% slice(1:50) %>% select(labelPTS) %>% pull()) %>%
+#   rename(`FG% (Att)` = FG,
+#          `FT% (Att)` = FT,
+#          `3PM` = FGM3)
+```
+
+Basketball
+=======================================================================
+
+Column {data-height=2000; .tabset}
+-----------------------------------------------------------------------
+
+### PTS
+
+```{r}
+DT::datatable(fbaCareer %>% 
+                select(name, PTS) %>%
+                arrange(desc(PTS)) %>%
+                slice(1:50),
+              options = list(pageLength = 50,
+                             dom = "t",
+                             columnDefs = list(
+                               list(className = "dt-right", targets = 0),
+                               list(className = "dt-left", targets = 1:2)
+                             ))) %>%
+  DT::formatStyle(columns = 0:2, fontSize = "150%")
+```
+
+### REB
+
+```{r}
+DT::datatable(fbaCareer %>% 
+                select(name, REB) %>%
+                arrange(desc(REB)) %>%
+                slice(1:50),
+              options = list(pageLength = 50,
+                             dom = "t",
+                             columnDefs = list(
+                               list(className = "dt-right", targets = 0),
+                               list(className = "dt-left", targets = 1:2)
+                             ))) %>%
+  DT::formatStyle(columns = 0:2, fontSize = "150%")
+```
+
+### AST
+
+```{r}
+DT::datatable(fbaCareer %>% 
+                select(name, AST) %>%
+                arrange(desc(AST)) %>%
+                slice(1:50),
+              options = list(pageLength = 50,
+                             dom = "t",
+                             columnDefs = list(
+                               list(className = "dt-right", targets = 0),
+                               list(className = "dt-left", targets = 1:2)
+                             ))) %>%
+  DT::formatStyle(columns = 0:2, fontSize = "150%")
+```
+
+### 3PM
+
+```{r}
+DT::datatable(fbaCareer %>% 
+                select(name, `3PM`) %>%
+                arrange(desc(`3PM`)) %>%
+                slice(1:50),
+              options = list(pageLength = 50,
+                             dom = "t",
+                             columnDefs = list(
+                               list(className = "dt-right", targets = 0),
+                               list(className = "dt-left", targets = 1:2)
+                             ))) %>%
+  DT::formatStyle(columns = 0:2, fontSize = "150%")
+```
+
+
+### STL
+
+```{r}
+DT::datatable(fbaCareer %>% 
+                select(name, STL) %>%
+                arrange(desc(STL)) %>%
+                slice(1:50),
+              options = list(pageLength = 50,
+                             dom = "t",
+                             columnDefs = list(
+                               list(className = "dt-right", targets = 0),
+                               list(className = "dt-left", targets = 1:2)
+                             ))) %>%
+  DT::formatStyle(columns = 0:2, fontSize = "150%")
+```
+
+### BLK
+
+```{r}
+DT::datatable(fbaCareer %>% 
+                select(name, BLK) %>%
+                arrange(desc(BLK)) %>%
+                slice(1:50),
+              options = list(pageLength = 50,
+                             dom = "t",
+                             columnDefs = list(
+                               list(className = "dt-right", targets = 0),
+                               list(className = "dt-left", targets = 1:2)
+                             ))) %>%
+  DT::formatStyle(columns = 0:2, fontSize = "150%")
+```
+
+### FG%
+
+```{r}
+DT::datatable(fbaCareer %>% 
+                mutate(`FG%` = format(100*round(FGM/FGA, 3), nsmall = 1)) %>%
+                select(name, liftFG, `FG%`, FGA) %>%
+                arrange(desc(liftFG)) %>%
+                select(-liftFG) %>%
+                slice(1:50),
+              options = list(pageLength = 50,
+                             dom = "t",
+                             columnDefs = list(
+                               list(className = "dt-right", targets = 0),
+                               list(className = "dt-left", targets = 1:2)
+                             ))) %>%
+  DT::formatStyle(columns = 0:3, fontSize = "150%")
+```
+
+### FT%
+
+```{r}
+DT::datatable(fbaCareer %>% 
+                mutate(`FT%` = format(100*round(FTM/FTA, 3), nsmall = 1)) %>%
+                select(name, liftFT, `FT%`, FTA) %>%
+                arrange(desc(liftFT)) %>%
+                select(-liftFT) %>%
+                slice(1:50),
+              options = list(pageLength = 50,
+                             dom = "t",
+                             columnDefs = list(
+                               list(className = "dt-right", targets = 0),
+                               list(className = "dt-left", targets = 1:2)
+                             ))) %>%
+  DT::formatStyle(columns = 0:3, fontSize = "150%")
+```
+
+Column {.tabset}
+-----------------------------------------------------------------------
+
+### PTS
+
+```{r}
+df <- 
+  fbaYearByYear %>%
+  mutate(cum = cumsum(PTS),
+         .by = playerId) %>%
+  mutate(rank = rank(-cum, ties.method = "min"),
+         .by = year) %>%
+  filter(any(rank == 1), 
+         .by = playerId) %>%
+  mutate(label = ifelse(rank == 1, str_c(year, ": ", name), NA))
+
+df %>%
+  plot_ly(x = ~year,
+          y = ~cum,
+          color = ~name,
+          type = "scatter",
+          mode = "lines",
+          hoverinfo = "none") %>%
+  layout(title = "Points Leader Race",
+         xaxis = list(title = "Year",
+                      tickangle = 315),
+         yaxis = list(title = "Points",
+                      rangemode = "tozero")) %>%
+  add_annotations(x = df$year[!is.na(df$label)],
+                  y = df$cum[!is.na(df$label)],
+                  text = df$label[!is.na(df$label)],
+                  xref = "x",
+                  yref = "y",
+                  showarrow = TRUE,
+                  arrowhead = 4,
+                  arrowsize = 0.5,
+                  ax = -45,
+                  ay = -30)
+
+
+```
+
+### REB
+
+```{r}
+df <- 
+  fbaYearByYear %>%
+  mutate(cum = cumsum(REB),
+         .by = playerId) %>%
+  mutate(rank = rank(-cum, ties.method = "min"),
+         .by = year) %>%
+  filter(any(rank == 1), 
+         .by = playerId) %>%
+  mutate(label = ifelse(rank == 1, str_c(year, ": ", name), NA))
+
+df %>%
+  plot_ly(x = ~year,
+          y = ~cum,
+          color = ~name,
+          type = "scatter",
+          mode = "lines",
+          hoverinfo = "none") %>%
+  layout(title = "Rebounds Leader Race",
+         xaxis = list(title = "Year",
+                      tickangle = 315),
+         yaxis = list(title = "Rebounds",
+                      rangemode = "tozero")) %>%
+  add_annotations(x = df$year[!is.na(df$label)],
+                  y = df$cum[!is.na(df$label)],
+                  text = df$label[!is.na(df$label)],
+                  xref = "x",
+                  yref = "y",
+                  showarrow = TRUE,
+                  arrowhead = 4,
+                  arrowsize = 0.5,
+                  ax = -45,
+                  ay = -30)
+
+```
+
+### AST
+
+```{r}
+df <- 
+  fbaYearByYear %>%
+  mutate(cum = cumsum(AST),
+         .by = playerId) %>%
+  mutate(rank = rank(-cum, ties.method = "min"),
+         .by = year) %>%
+  filter(any(rank == 1), 
+         .by = playerId) %>%
+  mutate(label = ifelse(rank == 1, str_c(year, ": ", name), NA))
+
+df %>%
+  plot_ly(x = ~year,
+          y = ~cum,
+          color = ~name,
+          type = "scatter",
+          mode = "lines",
+          hoverinfo = "none") %>%
+  layout(title = "Assists Leader Race",
+         xaxis = list(title = "Year",
+                      tickangle = 315),
+         yaxis = list(title = "Assists",
+                      rangemode = "tozero")) %>%
+  add_annotations(x = df$year[!is.na(df$label)],
+                  y = df$cum[!is.na(df$label)],
+                  text = df$label[!is.na(df$label)],
+                  xref = "x",
+                  yref = "y",
+                  showarrow = TRUE,
+                  arrowhead = 4,
+                  arrowsize = 0.5,
+                  ax = -45,
+                  ay = -30)
+
+```
+
+### 3PM
+
+```{r}
+df <- 
+  fbaYearByYear %>%
+  mutate(cum = cumsum(`3PM`),
+         .by = playerId) %>%
+  mutate(rank = rank(-cum, ties.method = "min"),
+         .by = year) %>%
+  filter(any(rank == 1), 
+         .by = playerId) %>%
+  mutate(label = ifelse(rank == 1, str_c(year, ": ", name), NA))
+
+df %>%
+  plot_ly(x = ~year,
+          y = ~cum,
+          color = ~name,
+          type = "scatter",
+          mode = "lines",
+          hoverinfo = "none") %>%
+  layout(title = "Three-Pointers Leader Race",
+         xaxis = list(title = "Year",
+                      tickangle = 315),
+         yaxis = list(title = "Three-Pointers",
+                      rangemode = "tozero")) %>%
+  add_annotations(x = df$year[!is.na(df$label)],
+                  y = df$cum[!is.na(df$label)],
+                  text = df$label[!is.na(df$label)],
+                  xref = "x",
+                  yref = "y",
+                  showarrow = TRUE,
+                  arrowhead = 4,
+                  arrowsize = 0.5,
+                  ax = -45,
+                  ay = -30)
+
+```
+
+### STL
+
+```{r}
+df <- 
+  fbaYearByYear %>%
+  mutate(cum = cumsum(STL),
+         .by = playerId) %>%
+  mutate(rank = rank(-cum, ties.method = "min"),
+         .by = year) %>%
+  filter(any(rank == 1), 
+         .by = playerId) %>%
+  mutate(label = ifelse(rank == 1, str_c(year, ": ", name), NA))
+
+df %>%
+  plot_ly(x = ~year,
+          y = ~cum,
+          color = ~name,
+          type = "scatter",
+          mode = "lines",
+          hoverinfo = "none") %>%
+  layout(title = "Steals Leader Race",
+         xaxis = list(title = "Year",
+                      tickangle = 315),
+         yaxis = list(title = "Steals",
+                      rangemode = "tozero")) %>%
+  add_annotations(x = df$year[!is.na(df$label)],
+                  y = df$cum[!is.na(df$label)],
+                  text = df$label[!is.na(df$label)],
+                  xref = "x",
+                  yref = "y",
+                  showarrow = TRUE,
+                  arrowhead = 4,
+                  arrowsize = 0.5,
+                  ax = -45,
+                  ay = -30)
+
+```
+
+### BLK
+
+```{r}
+df <- 
+  fbaYearByYear %>%
+  mutate(cum = cumsum(BLK),
+         .by = playerId) %>%
+  mutate(rank = rank(-cum, ties.method = "min"),
+         .by = year) %>%
+  filter(any(rank == 1), 
+         .by = playerId) %>%
+  mutate(label = ifelse(rank == 1, str_c(year, ": ", name), NA))
+
+df %>%
+  plot_ly(x = ~year,
+          y = ~cum,
+          color = ~name,
+          type = "scatter",
+          mode = "lines",
+          hoverinfo = "none") %>%
+  layout(title = "Blocks Leader Race",
+         xaxis = list(title = "Year",
+                      tickangle = 315),
+         yaxis = list(title = "Blocks",
+                      rangemode = "tozero")) %>%
+  add_annotations(x = df$year[!is.na(df$label)],
+                  y = df$cum[!is.na(df$label)],
+                  text = df$label[!is.na(df$label)],
+                  xref = "x",
+                  yref = "y",
+                  showarrow = TRUE,
+                  arrowhead = 4,
+                  arrowsize = 0.5,
+                  ax = -45,
+                  ay = -30)
+
+```
+
+### FG%
+
+```{r}
+df <-
+  fbaYearByYear %>%
+  mutate(FGM = cumsum(FGM),
+         FGA = cumsum(FGA),
+         .by = playerId) %>%
+  mutate(cum = (sum(FGM)/sum(FGA)) - ((sum(FGM) - FGM)/(sum(FGA) - FGA)),
+         rank = rank(-cum, ties.method = "min"),
+         .by = year) %>%
+  filter(any(rank == 1), 
+         .by = playerId)  %>%
+  mutate(label = ifelse(rank == 1, str_c(year, ": ", name), NA))
+
+
+df %>%
+  plot_ly(x = ~year,
+          y = ~cum,
+          color = ~name,
+          type = "scatter",
+          mode = "lines") %>%
+  layout(title = "FG% Leader Race",
+         xaxis = list(title = "Year",
+                      tickangle = 315),
+         yaxis = list(title = "Impact on FG%",
+                      rangemode = "tozero")) %>%
+  add_annotations(x = df$year[!is.na(df$label)],
+                  y = df$cum[!is.na(df$label)],
+                  text = df$label[!is.na(df$label)],
+                  xref = "x",
+                  yref = "y",
+                  showarrow = TRUE,
+                  arrowhead = 4,
+                  arrowsize = 0.5,
+                  ax = -45,
+                  ay = -30)
+```
+
+### FT%
+
+```{r}
+df <- 
+  fbaYearByYear %>%
+  mutate(FTM = cumsum(FTM),
+         FTA = cumsum(FTA),
+         .by = playerId) %>%
+  mutate(cum = (sum(FTM)/sum(FTA)) - ((sum(FTM) - FTM)/(sum(FTA) - FTA)),
+         rank = rank(-cum, ties.method = "min"),
+         .by = year) %>%
+  filter(any(rank == 1), 
+         .by = playerId) %>%
+  mutate(label = ifelse(rank == 1, str_c(year, ": ", name), NA))
+  
+  
+df %>%  
+  plot_ly(x = ~year,
+          y = ~cum,
+          color = ~name,
+          type = "scatter",
+          mode = "lines") %>%
+  layout(title = "FT% Leader Race",
+         xaxis = list(title = "Year",
+                      tickangle = 315),
+         yaxis = list(title = "Impact on FT%",
+                      rangemode = "tozero")) %>%
+  add_annotations(x = df$year[!is.na(df$label)],
+                  y = df$cum[!is.na(df$label)],
+                  text = df$label[!is.na(df$label)],
+                  xref = "x",
+                  yref = "y",
+                  showarrow = TRUE,
+                  arrowhead = 4,
+                  arrowsize = 0.5,
+                  ax = -45,
+                  ay = -30)
+```
+
